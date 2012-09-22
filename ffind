@@ -8,48 +8,77 @@
 #
 #                         The friendlier file finder.
 
+import optparse
 from optparse import OptionParser, OptionGroup
 
+CASE_SENSITIVE = 1
+CASE_INSENSITIVE = 2
+CASE_SMART = 3
+
 def build_option_parser():
-    p = OptionParser()
+    p = OptionParser("usage: %prog [options] PATTERN")
 
     # Main options
-    p.add_option('-r', '--root',
-                 help='root the search in DIR',
+    p.add_option('-d', '--dir',
+                 help='root the search in DIR (default .)',
                  metavar='DIR')
-    p.add_option('-d', '--depth',
-                 help='search at most N directories deep',
+    p.add_option('-D', '--depth',
+                 help='search at most N directories deep (default 25)',
                  metavar='N')
     p.add_option('-f', '--follow',
                  action='store_true', default=False,
                  help='follow symlinked directories and search their contents')
+    p.add_option('-F', '--no-follow',
+                 dest='follow', action='store_false',
+                 help="don't follow symlinked directories (default)")
     p.add_option('-0', '--print0', dest='zero',
                  action='store_true', default=False,
                  help='separate matches with a null byte in output')
     p.add_option('-l', '--literal',
                  action='store_true', default=False,
                  help='force literal search, even if it looks like a regex')
-    p.add_option('-i', '--insensitive',
-                 action='store_true', default=False,
-                 help='case insensitive matching')
     p.add_option('-v', '--invert',
                  action='store_true', default=False,
                  help='invert match')
+    p.add_option('--stdin',
+                 action='store_true', default=False,
+                 help='restrict possible matches to paths given on stdin')
+
+    # Case sensitivity
+    g = OptionGroup(p, "Configuring Case Sensitivity")
+    g.add_option('-s', '--case-sensitive',
+                 dest='case', action='store_const', const=CASE_SENSITIVE,
+                 default=CASE_SENSITIVE,
+                 help='case sensitive matching (default)')
+    g.add_option('-i', '--case-insensitive',
+                 dest='case', action='store_const', const=CASE_INSENSITIVE,
+                 help='case insensitive matching')
+    g.add_option('-S', '--case-smart',
+                 dest='case', action='store_const', const=CASE_SMART,
+                 help='smart case matching (sensitive if any uppercase chars '
+                      'are in the pattern, insensitive otherwise)')
+    p.add_option_group(g)
 
     # Ignoring
     g = OptionGroup(p, "Configuring Ignoring")
-    g.add_option('-b', '--no-binary',
-                 action='store_true', default=False,
+    g.add_option('-b', '--binary',
+                 dest='binary', action='store_true', default=True,
+                 help="allow binary files (default)")
+    g.add_option('-B', '--no-binary',
+                 dest='binary', action='store_false',
                  help='ignore binary files')
-    g.add_option('-a', '--all',
+    g.add_option('-r', '--restricted',
                  action='store_true', default=False,
-                 help="don't ignore anything (ALL files can match)")
+                 help="restricted search (skip VCS directories, parse all ignore files) (default)")
+    g.add_option('-q', '--semi-restricted',
+                 action='store_true', default=False,
+                 help="semi-restricted search (don't parse VCS ignore files, but still skip VCS directories and parse .ffignore)")
     g.add_option('-u', '--unrestricted',
                  action='store_true', default=False,
                  help="unrestricted search (don't parse ignore files, but still skip VCS directories)")
-    g.add_option('-q', '--restricted',
+    g.add_option('-a', '--all',
                  action='store_true', default=False,
-                 help="restricted search (don't parse VCS ignore files, but still skip VCS directories and parse .ffignore)")
+                 help="don't ignore anything (ALL files can match)")
     p.add_option_group(g)
 
     # Time filtering
@@ -82,7 +111,7 @@ def build_option_parser():
                  help='match files created >= TIME',
                  metavar='TIME')
     g.add_option('--created-at',
-                 help='match files modified at TIME',
+                 help='match files created at TIME',
                  metavar='TIME')
     p.add_option_group(g)
 
@@ -93,6 +122,8 @@ def build_option_parser():
     g.add_option('--larger-than',
                  help='match files larger than SIZE (inclusive)',
                  metavar='SIZE')
+    g.add_option('--bigger-than', dest='larger_than',
+                 help=optparse.SUPPRESS_HELP)
     g.add_option('--smaller-than',
                  help='match files smaller than SIZE (inclusive)',
                  metavar='SIZE')
@@ -100,34 +131,21 @@ def build_option_parser():
 
     # Type filtering
     g = OptionGroup(p, "Type Filtering",
-                    "A thing is a file or a directory.")
-    g.add_option('-A', '--type-all', dest='type_all',
-                 action='store_true', default=False,
-                 help='match all things (default)')
-    g.add_option('-F', '--type-file', dest='type_file',
-                 action='store_true', default=False,
-                 help='match any kind of file')
-    g.add_option('-D', '--type-dir', dest='type_dir',
-                 action='store_true', default=False,
-                 help='match any kind of directory')
-    g.add_option('-R', '--type-real', dest='type_real',
-                 action='store_true', default=False,
-                 help='match real things')
-    g.add_option('-S', '--type-symlink', dest='type_symlink',
-                 action='store_true', default=False,
-                 help='match symlink things')
-    g.add_option('-E', '--type-file-real', dest='type_file_real',
-                 action='store_true', default=False,
-                 help='match real (non-symlink) files')
-    g.add_option('-C', '--type-dir-real', dest='type_dir_real',
-                 action='store_true', default=False,
-                 help='match real (non-symlink) directories')
-    g.add_option('-X', '--type-file-symlink', dest='type_file_symlink',
-                 action='store_true', default=False,
-                 help='match symlink files')
-    g.add_option('-Y', '--type-dir-symlink', dest='type_dir_symlink',
-                 action='store_true', default=False,
-                 help='match symlink directories')
+                    "Possible types are "
+                    "a (all), "
+                    "f (files), "
+                    "d (dirs), "
+                    "r (real), "
+                    "s (symlinked), "
+                    "e (real files), "
+                    "c (real dirs), "
+                    "x (symlinked files), "
+                    "y (symlinked dirs). "
+                    "If multiple types are given they will be unioned together:  "
+                    "--type es would match real files and all symlinks.")
+    g.add_option('-t', '--type',
+                 action='store', default=False, metavar='TYPE(S)',
+                 help='match only specific types of things (files, dirs, non-symlinks, symlinks)')
     p.add_option_group(g)
 
     return p
