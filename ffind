@@ -8,21 +8,81 @@
 #
 #                         The friendlier file finder.
 
+import os
 import optparse
+import string
+import sys
 from optparse import OptionParser, OptionGroup
 
+
+# Constants -------------------------------------------------------------------
 CASE_SENSITIVE = 1
 CASE_INSENSITIVE = 2
 CASE_SMART = 3
 
+VCS_DIRS = ['.hg', '.git', '.svn']
+
+# Global Options --------------------------------------------------------------
+# (it's a prototype, shut up)
+options = None
+
+# Output ----------------------------------------------------------------------
+def out(s):
+    sys.stdout.write(s + '\n')
+
+def err(s):
+    sys.stderr.write(s + '\n')
+
+def die(s, exitcode=1):
+    err('error: ' + s)
+    sys.exit(exitcode)
+
+
+# Searching! ------------------------------------------------------------------
+def should_ignore(basename, path):
+    if basename in VCS_DIRS:
+        return True
+
+    return False
+
+def match(query, path):
+    def _match():
+        if options.case == CASE_INSENSITIVE:
+            return query.lower() in path.lower()
+        else:
+            return query in path
+
+    result = _match()
+    return not result if options.invert else result
+
+def search(query, dir='.', depth=0):
+    contents = os.listdir(dir)
+
+    next = []
+    for item in contents:
+        path = os.path.join(dir, item)
+        if not should_ignore(item, path):
+            if match(query, path):
+                print path
+
+            is_dir = os.path.isdir(path)
+            if is_dir:
+                next.append(path)
+
+    if depth < options.depth:
+        for d in next:
+            search(query, d, depth + 1)
+
+
+# Option Parsing and Main -----------------------------------------------------
 def build_option_parser():
     p = OptionParser("usage: %prog [options] PATTERN")
 
     # Main options
-    p.add_option('-d', '--dir',
+    p.add_option('-d', '--dir', default='.',
                  help='root the search in DIR (default .)',
                  metavar='DIR')
-    p.add_option('-D', '--depth',
+    p.add_option('-D', '--depth', default='25',
                  help='search at most N directories deep (default 25)',
                  metavar='N')
     p.add_option('-f', '--follow',
@@ -79,6 +139,9 @@ def build_option_parser():
     g.add_option('-a', '--all',
                  action='store_true', default=False,
                  help="don't ignore anything (ALL files can match)")
+    g.add_option('-I', '--ignore', metavar='PATTERN',
+                 action='append',
+                 help="add a pattern to be ignored (can be given multiple times)")
     p.add_option_group(g)
 
     # Time filtering
@@ -142,7 +205,7 @@ def build_option_parser():
                     "x (symlinked files), "
                     "y (symlinked dirs). "
                     "If multiple types are given they will be unioned together:  "
-                    "--type es would match real files and all symlinks.")
+                    "--type 'es' would match real files and all symlinks.")
     g.add_option('-t', '--type',
                  action='store', default=False, metavar='TYPE(S)',
                  help='match only specific types of things (files, dirs, non-symlinks, symlinks)')
@@ -150,9 +213,42 @@ def build_option_parser():
 
     return p
 
+
 def main():
+    global options
+
     (options, args) = build_option_parser().parse_args()
-    print options, args
+
+    # PATTERN
+    if len(args) > 1:
+        die("only one search pattern can be given")
+        sys.exit(1)
+
+    query = args[0] if args else ''
+
+    # --dir
+    if options.dir:
+        try:
+            os.chdir(options.dir)
+        except OSError:
+            die('could not change to directory "%s"' % options.dir)
+
+    # --depth
+    try:
+        options.depth = int(options.depth)
+    except ValueError:
+        die('depth must be a non-negative integer (got "%s")' % options.depth)
+
+    # --case-*
+    if options.case == CASE_SMART:
+        if any(c in string.uppercase for c in query):
+            options.case = CASE_SENSITIVE
+        else:
+            options.case = CASE_INSENSITIVE
+
+    # Go!
+    search(query)
+
 
 if __name__ == '__main__':
     main()
