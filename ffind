@@ -12,6 +12,7 @@ import os
 import optparse
 import string
 import sys
+import re
 from optparse import OptionParser, OptionGroup
 
 
@@ -19,6 +20,13 @@ from optparse import OptionParser, OptionGroup
 CASE_SENSITIVE = 1
 CASE_INSENSITIVE = 2
 CASE_SMART = 3
+
+BYTE = 1
+KILOBYTE = 1024 * BYTE
+MEGABYTE = 1024 * KILOBYTE
+GIGABYTE = 1024 * MEGABYTE
+TERABYTE = 1024 * GIGABYTE
+PETABYTE = 1024 * TERABYTE
 
 VCS_DIRS = ['.hg', '.git', '.svn']
 
@@ -39,6 +47,10 @@ TYPES_REAL = TYPES_FILE_REAL | TYPES_DIR_REAL
 TYPES_SYMLINK = TYPES_FILE_SYMLINK | TYPES_DIR_SYMLINK
 
 TYPES_ALL = TYPES_FILE | TYPES_DIR
+
+
+# Regexes ---------------------------------------------------------------------
+SIZE_RE = re.compile(r'^(\d+(?:\.\d+)?)([bkmgtp])?[a-z]*$', re.IGNORECASE)
 
 
 # Global Options --------------------------------------------------------------
@@ -89,6 +101,16 @@ def match(query, path, basename):
                 return False
         else:
             if query not in basename:
+                return False
+
+        if options.larger_than:
+            stat = os.stat(path)
+            if stat.st_size < options.larger_than:
+                return False
+
+        if options.smaller_than:
+            stat = os.stat(path)
+            if stat.st_size > options.smaller_than:
                 return False
 
         if not options.binary:
@@ -287,6 +309,35 @@ def build_type_set(types):
     return result
 
 
+def parse_size(size):
+    size = size.replace(' ', '') if size else size
+
+    if not size:
+        return None
+
+    m = SIZE_RE.match(size)
+    if not m:
+        die('invalid size "%s"' % size)
+
+    n, unit = m.groups()
+
+    try:
+        n = float(n)
+    except ValueError:
+        die('invalid size "%s"' % size)
+
+    unit = {
+        'b': BYTE,
+        'k': KILOBYTE,
+        'm': MEGABYTE,
+        'g': GIGABYTE,
+        't': TERABYTE,
+        'p': PETABYTE,
+    }[unit or 'b']
+
+    return int(n * unit)
+
+
 def main():
     global options
 
@@ -321,6 +372,10 @@ def main():
 
     # --type
     options.type = build_type_set(options.type)
+
+    # --larger-than, --smaller-than
+    options.larger_than = parse_size(options.larger_than)
+    options.smaller_than = parse_size(options.smaller_than)
 
     # Go!
     search(query)
