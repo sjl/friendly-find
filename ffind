@@ -96,12 +96,8 @@ def match(query, path, basename):
             if get_type(path) not in options.type:
                 return False
 
-        if options.case == CASE_INSENSITIVE:
-            if query.lower() not in basename.lower():
-                return False
-        else:
-            if query not in basename:
-                return False
+        if not query(basename):
+            return False
 
         if options.larger_than:
             stat = os.stat(path)
@@ -335,6 +331,16 @@ def parse_size(size):
 
     return int(n * unit)
 
+def is_re(s):
+    """Try to guess if the string is a regex.
+
+    Err on the side of "True", because treating a literal like a regex only
+    slows you down a bit, but the other way around is broken behaviour.
+
+    """
+
+    return not all(c.lower() in string.letters + '_-' for c in s)
+
 
 def main():
     global options
@@ -378,6 +384,21 @@ def main():
     if options.larger_than or options.smaller_than:
         # Directory sizes are not supported.
         options.type = options.type - TYPES_DIR
+
+    # Build the query matcher.
+    if options.literal or not is_re(query):
+        if options.case == CASE_SENSITIVE:
+            literal = query
+            query = lambda s: literal in s
+        else:
+            literal = query.lower()
+            query = lambda s: literal in s.lower()
+    else:
+        if options.case == CASE_SENSITIVE:
+            r = re.compile(query)
+        else:
+            r = re.compile(query, re.IGNORECASE)
+        query = lambda s: r.search(s)
 
     # Go!
     search(query)
