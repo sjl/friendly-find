@@ -100,9 +100,6 @@ def build_option_parser():
     p.add_option('-v', '--invert',
                  action='store_true', default=False,
                  help='invert match')
-    p.add_option('--stdin',
-                 action='store_true', default=False,
-                 help='restrict possible matches to paths given on stdin')
 
     # Case sensitivity
     g = OptionGroup(p, "Configuring Case Sensitivity")
