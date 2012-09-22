@@ -8,6 +8,7 @@
 #
 #                         The friendlier file finder.
 
+import time
 import os
 import optparse
 import string
@@ -48,9 +49,30 @@ TYPES_SYMLINK = TYPES_FILE_SYMLINK | TYPES_DIR_SYMLINK
 
 TYPES_ALL = TYPES_FILE | TYPES_DIR
 
+SECOND = 1
+MINUTE = 60 * SECOND
+HOUR = 60 * MINUTE
+DAY = 24 * HOUR
+WEEK = 7 * DAY
+MONTH = 30 * DAY
+YEAR = int(365.2425 * DAY)
+
 
 # Regexes ---------------------------------------------------------------------
 SIZE_RE = re.compile(r'^(\d+(?:\.\d+)?)([bkmgtp])?[a-z]*$', re.IGNORECASE)
+AGO_RE = re.compile(r'''
+                    (\d+(?:\.\d+)?)           # The number (float/int)
+                    \s*                       # Optional whitespace
+                    (                         # Units
+                        y(?:ears?)?           # y/year/years
+                      | mos?(?:nths?)?        # mo/mos/month/months
+                      | w(?:eeks?)?           # w/week/weeks
+                      | d(?:ays?)?            # d/day/days
+                      | h(?:ours?)?           # h/hour/hours
+                      | m(?:ins?(?:utes?)?)?  # m/min/mins/minute/minutes
+                      | s(?:ecs?(?:onds?)?)?  # s/sec/secs/second/seconds
+                    )
+                    ''', re.VERBOSE | re.IGNORECASE)
 
 
 # Global Options --------------------------------------------------------------
@@ -99,14 +121,21 @@ def match(query, path, basename):
         if not query(basename):
             return False
 
+        stat = os.lstat(path)
         if options.larger_than:
-            stat = os.stat(path)
             if stat.st_size < options.larger_than:
                 return False
 
         if options.smaller_than:
-            stat = os.stat(path)
             if stat.st_size > options.smaller_than:
+                return False
+
+        if options.before:
+            if stat.st_mtime > options.before:
+                return False
+
+        if options.after:
+            if stat.st_mtime < options.after:
                 return False
 
         if not options.binary:
@@ -342,6 +371,55 @@ def is_re(s):
     return not all(c.lower() in string.letters + '_-' for c in s)
 
 
+def clean_ago_piece(n, unit):
+    n = float(n)
+
+    if unit in ['s', 'sec', 'secs', 'second', 'seconds']:
+        unit = SECOND
+    if unit in ['m', 'min', 'mins', 'minute', 'minutes']:
+        unit = MINUTE
+    if unit in ['h', 'hour', 'hours']:
+        unit = HOUR
+    if unit in ['d', 'day', 'days']:
+        unit = DAY
+    if unit in ['w', 'week', 'weeks']:
+        unit = WEEK
+    if unit in ['mo', 'mos', 'month', 'months']:
+        unit = MONTH
+    if unit in ['y', 'year', 'years']:
+        unit = YEAR
+
+    return n, unit
+
+def parse_ago(start_time, timestr):
+    pieces = AGO_RE.findall(timestr)
+
+    units = set()
+    result = start_time
+
+    for piece in pieces:
+        n, unit = clean_ago_piece(*piece)
+
+        if unit in units:
+            die('duplicate "%s" in time specification' % unit)
+
+        units.add(unit)
+        result -= n * unit
+
+    return int(result)
+
+def parse_time(timestr):
+    """Parse a time string into milliseconds past the epoch."""
+    start_time = int(time.time())
+
+    timestr = timestr.strip().lower()
+
+    if AGO_RE.match(timestr):
+        return parse_ago(start_time, timestr)
+
+    return None
+
+
 def main():
     global options
 
@@ -384,6 +462,13 @@ def main():
     if options.larger_than or options.smaller_than:
         # Directory sizes are not supported.
         options.type = options.type - TYPES_DIR
+
+    # time filtering
+    if options.before:
+        options.before = parse_time(options.before)
+
+    if options.after:
+        options.after = parse_time(options.after)
 
     # Build the query matcher.
     if options.literal or not is_re(query):
