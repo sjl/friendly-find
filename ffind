@@ -27,8 +27,8 @@ VCS_DIRS = ['.hg', '.git', '.svn']
 options = None
 
 # Output ----------------------------------------------------------------------
-def out(s):
-    sys.stdout.write(s + '\n')
+def out(s, line_ending='\n'):
+    sys.stdout.write(s + line_ending)
 
 def err(s):
     sys.stderr.write(s + '\n')
@@ -63,7 +63,7 @@ def search(query, dir='.', depth=0):
         path = os.path.join(dir, item)
         if not should_ignore(item, path):
             if match(query, path):
-                print path
+                out(path, '\0' if options.zero else '\n')
 
             is_dir = os.path.isdir(path)
             if is_dir:
