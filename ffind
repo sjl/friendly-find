@@ -22,9 +22,29 @@ CASE_SMART = 3
 
 VCS_DIRS = ['.hg', '.git', '.svn']
 
+TYPE_FILE_REAL = 1
+TYPE_FILE_SYMLINK = 2
+TYPE_DIR_REAL = 3
+TYPE_DIR_SYMLINK = 4
+
+TYPES_FILE_REAL = set([TYPE_FILE_REAL])
+TYPES_FILE_SYMLINK = set([TYPE_FILE_SYMLINK])
+TYPES_DIR_REAL = set([TYPE_DIR_REAL])
+TYPES_DIR_SYMLINK = set([TYPE_DIR_SYMLINK])
+
+TYPES_FILE = TYPES_FILE_REAL | TYPES_FILE_SYMLINK
+TYPES_DIR = TYPES_DIR_REAL | TYPES_DIR_SYMLINK
+
+TYPES_REAL = TYPES_FILE_REAL | TYPES_DIR_REAL
+TYPES_SYMLINK = TYPES_FILE_SYMLINK | TYPES_DIR_SYMLINK
+
+TYPES_ALL = TYPES_FILE | TYPES_DIR
+
+
 # Global Options --------------------------------------------------------------
 # (it's a prototype, shut up)
 options = None
+
 
 # Output ----------------------------------------------------------------------
 def out(s, line_ending='\n'):
@@ -39,6 +59,19 @@ def die(s, exitcode=1):
 
 
 # Searching! ------------------------------------------------------------------
+def get_type(path):
+    link = os.path.islink(path)
+    dir = os.path.isdir(path)
+
+    if link and dir:
+        return TYPE_DIR_SYMLINK
+    elif link and not dir:
+        return TYPE_FILE_SYMLINK
+    elif not link and dir:
+        return TYPE_DIR_REAL
+    elif not link and not dir:
+        return TYPE_FILE_REAL
+
 def should_ignore(basename, path):
     if basename in VCS_DIRS:
         return True
@@ -47,6 +80,10 @@ def should_ignore(basename, path):
 
 def match(query, path):
     def _match():
+        if options.type != TYPES_ALL:
+            if get_type(path) not in options.type:
+                return False
+
         if options.case == CASE_INSENSITIVE:
             return query.lower() in path.lower()
         else:
@@ -126,13 +163,16 @@ def build_option_parser():
                  help='ignore binary files')
     g.add_option('-r', '--restricted',
                  action='store_true', default=False,
-                 help="restricted search (skip VCS directories, parse all ignore files) (default)")
+                 help="restricted search (skip VCS directories, "
+                      "parse all ignore files) (default)")
     g.add_option('-q', '--semi-restricted',
                  action='store_true', default=False,
-                 help="semi-restricted search (don't parse VCS ignore files, but still skip VCS directories and parse .ffignore)")
+                 help="semi-restricted search (don't parse VCS ignore files, "
+                      "but still skip VCS directories and parse .ffignore)")
     g.add_option('-u', '--unrestricted',
                  action='store_true', default=False,
-                 help="unrestricted search (don't parse ignore files, but still skip VCS directories)")
+                 help="unrestricted search (don't parse ignore files, but "
+                      "still skip VCS directories)")
     g.add_option('-a', '--all',
                  action='store_true', default=False,
                  help="don't ignore anything (ALL files can match)")
@@ -211,6 +251,30 @@ def build_option_parser():
     return p
 
 
+def build_type_set(types):
+    if not types:
+        return TYPES_ALL
+
+    result = set()
+    for c in types:
+        result = result | {
+            'a': TYPES_ALL,
+
+            'e': TYPES_FILE_REAL,
+            'x': TYPES_FILE_SYMLINK,
+            'c': TYPES_DIR_REAL,
+            'y': TYPES_DIR_SYMLINK,
+
+            'f': TYPES_FILE,
+            'd': TYPES_DIR,
+
+            'r': TYPES_REAL,
+            's': TYPES_SYMLINK,
+        }[c.lower()]
+
+    return result
+
+
 def main():
     global options
 
@@ -242,6 +306,9 @@ def main():
             options.case = CASE_SENSITIVE
         else:
             options.case = CASE_INSENSITIVE
+
+    # --type
+    options.type = build_type_set(options.type)
 
     # Go!
     search(query)
