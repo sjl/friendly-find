@@ -284,7 +284,6 @@ def build_option_parser():
 
     return p
 
-
 def build_type_set(types):
     if not types:
         return TYPES_ALL
@@ -307,7 +306,6 @@ def build_type_set(types):
         }[c.lower()]
 
     return result
-
 
 def parse_size(size):
     size = size.replace(' ', '') if size else size
@@ -376,6 +374,10 @@ def main():
     # --larger-than, --smaller-than
     options.larger_than = parse_size(options.larger_than)
     options.smaller_than = parse_size(options.smaller_than)
+
+    if options.larger_than or options.smaller_than:
+        # Directory sizes are not supported.
+        options.type = options.type - TYPES_DIR
 
     # Go!
     search(query)
