@@ -57,6 +57,15 @@ WEEK = 7 * DAY
 MONTH = 30 * DAY
 YEAR = int(365.2425 * DAY)
 
+IGNORE_SYNTAX_REGEX = 1
+IGNORE_SYNTAX_GLOB = 2
+IGNORE_SYNTAX_LITERAL = 3
+
+IGNORE_MODE_RESTRICTED = 1
+IGNORE_MODE_SEMI = 2
+IGNORE_MODE_UNRESTRICTED = 3
+IGNORE_MODE_ALL = 4
+
 
 # Regexes ---------------------------------------------------------------------
 SIZE_RE = re.compile(r'^(\d+(?:\.\d+)?)([bkmgtp])?[a-z]*$', re.IGNORECASE)
@@ -73,6 +82,10 @@ AGO_RE = re.compile(r'''
                       | s(?:ecs?(?:onds?)?)?  # s/sec/secs/second/seconds
                     )
                     ''', re.VERBOSE | re.IGNORECASE)
+IGNORE_SYNTAX_RE = re.compile(r'^\s*syntax:\s*(glob|regexp|regex|re|literal)\s*$',
+                              re.IGNORECASE)
+IGNORE_COMMENT_RE = re.compile(r'^\s*#')
+IGNORE_BLANK_RE = re.compile(r'^\s*$')
 
 
 # Global Options --------------------------------------------------------------
@@ -91,6 +104,65 @@ def die(s, exitcode=1):
     err('error: ' + s)
     sys.exit(exitcode)
 
+def warn(s):
+    sys.stderr.write('warning: ' + s + '\n')
+
+
+# Ingore Files ----------------------------------------------------------------
+def compile_re(line):
+    try:
+        r = re.compile(line)
+        return lambda s: r.search(s)
+    except:
+        warn('could not compile regular expression "%s"' % line)
+        return lambda s: False
+
+def compile_glob(line):
+    # TODO
+    die('glob ignore patterns are not supported yet, sorry!')
+
+def compile_literal(line):
+    l = line
+    return lambda s: l in s
+
+def parse_ignore_file(path):
+    if not os.path.isfile(path):
+        return []
+
+    syntax = IGNORE_SYNTAX_REGEX
+    ignorers = []
+    with open(path) as f:
+        for line in f.readlines():
+            line = line.rstrip('\n')
+            if IGNORE_BLANK_RE.match(line):
+                continue
+            elif IGNORE_COMMENT_RE.match(line):
+                continue
+            elif IGNORE_SYNTAX_RE.match(line):
+                s = IGNORE_SYNTAX_RE.match(line).groups()[0].lower()
+                if s == 'literal':
+                    syntax = IGNORE_SYNTAX_LITERAL
+                elif s == 'glob':
+                    syntax = IGNORE_SYNTAX_GLOB
+                elif s in ['re', 'regex', 'regexp']:
+                    syntax = IGNORE_SYNTAX_REGEX
+            else:
+                # This line is a pattern.
+                if syntax == IGNORE_SYNTAX_LITERAL:
+                    ignorers.append(compile_literal(line))
+                elif syntax == IGNORE_SYNTAX_REGEX:
+                    ignorers.append(compile_re(line))
+                elif syntax == IGNORE_SYNTAX_GLOB:
+                    ignorers.append(compile_glob(line))
+
+    return ignorers
+
+def parse_ignore_files(dir):
+    ignorers = []
+    for filename in options.ignore_files:
+        ignorers.extend(parse_ignore_file(os.path.join(dir, filename)))
+    return ignorers
+
 
 # Searching! ------------------------------------------------------------------
 def get_type(path):
@@ -106,8 +178,11 @@ def get_type(path):
     elif not link and not dir:
         return TYPE_FILE_REAL
 
-def should_ignore(basename, path):
-    if basename in VCS_DIRS:
+def should_ignore(basename, path, ignorers):
+    if options.ignore_vcs_dirs and basename in VCS_DIRS:
+        return True
+
+    if any(map(lambda i: i(path), ignorers)):
         return True
 
     return False
@@ -149,13 +224,14 @@ def match(query, path, basename):
     result = _match()
     return not result if options.invert else result
 
-def search(query, dir='.', depth=0):
+def search(query, dir='.', depth=0, ignorers=[]):
+    ignorers = ignorers + parse_ignore_files(dir)
     contents = os.listdir(dir)
-
     next = []
+
     for item in contents:
         path = os.path.join(dir, item)
-        if not should_ignore(item, path):
+        if not should_ignore(item, path, ignorers):
             if match(query, path, item):
                 out(path, '\0' if options.zero else '\n')
 
@@ -167,7 +243,7 @@ def search(query, dir='.', depth=0):
 
     if depth < options.depth:
         for d in next:
-            search(query, d, depth + 1)
+            search(query, d, depth + 1, ignorers)
 
 
 # Option Parsing and Main -----------------------------------------------------
@@ -214,30 +290,39 @@ def build_option_parser():
 
     # Ignoring
     g = OptionGroup(p, "Configuring Ignoring")
+
     g.add_option('-b', '--binary',
                  dest='binary', action='store_true', default=True,
                  help="allow binary files (default)")
+
     g.add_option('-B', '--no-binary',
                  dest='binary', action='store_false',
                  help='ignore binary files')
-    g.add_option('-r', '--restricted',
-                 action='store_true', default=False,
+
+    g.add_option('-r', '--restricted', dest='ignore_mode',
+                 action='store_const', const=IGNORE_MODE_RESTRICTED,
+                 default=IGNORE_MODE_RESTRICTED,
                  help="restricted search (skip VCS directories, "
                       "parse all ignore files) (default)")
-    g.add_option('-q', '--semi-restricted',
-                 action='store_true', default=False,
+
+    g.add_option('-q', '--semi-restricted', dest='ignore_mode',
+                 action='store_const', const=IGNORE_MODE_SEMI,
                  help="semi-restricted search (don't parse VCS ignore files, "
                       "but still skip VCS directories and parse .ffignore)")
-    g.add_option('-u', '--unrestricted',
-                 action='store_true', default=False,
+
+    g.add_option('-u', '--unrestricted', dest='ignore_mode',
+                 action='store_const', const=IGNORE_MODE_UNRESTRICTED,
                  help="unrestricted search (don't parse ignore files, but "
                       "still skip VCS directories)")
-    g.add_option('-a', '--all',
-                 action='store_true', default=False,
+
+    g.add_option('-a', '--all', dest='ignore_mode',
+                 action='store_const', const=IGNORE_MODE_ALL,
                  help="don't ignore anything (ALL files can match)")
+
     g.add_option('-I', '--ignore', metavar='PATTERN',
                  action='append',
                  help="add a pattern to be ignored (can be given multiple times)")
+
     p.add_option_group(g)
 
     # Time filtering
@@ -272,7 +357,8 @@ def build_option_parser():
     g.add_option('--created-at',
                  help='match files created at TIME',
                  metavar='TIME')
-    p.add_option_group(g)
+    # TODO
+    # p.add_option_group(g)
 
     # Size filtering
     g = OptionGroup(p, "Size Filtering",
@@ -469,6 +555,20 @@ def main():
 
     if options.after:
         options.after = parse_time(options.after)
+
+    # Ignore files
+    if options.ignore_mode == IGNORE_MODE_RESTRICTED:
+        options.ignore_files = ['.ffignore']
+        options.ignore_vcs_dirs = True
+    elif options.ignore_mode == IGNORE_MODE_SEMI:
+        options.ignore_files = ['.ffignore']
+        options.ignore_vcs_dirs = True
+    elif options.ignore_mode == IGNORE_MODE_UNRESTRICTED:
+        options.ignore_files = []
+        options.ignore_vcs_dirs = True
+    elif options.ignore_mode == IGNORE_MODE_ALL:
+        options.ignore_files = []
+        options.ignore_vcs_dirs = False
 
     # Build the query matcher.
     if options.literal or not is_re(query):
