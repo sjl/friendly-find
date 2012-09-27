@@ -286,8 +286,9 @@ def should_ignore(basename, path, ignorers):
     if options.ignore_vcs_dirs and basename in VCS_DIRS:
         return True
 
-    if any(map(lambda i: i(path), ignorers)):
-        return True
+    for i in ignorers:
+        if i(path):
+            return True
 
     return False
 
