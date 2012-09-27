@@ -163,6 +163,15 @@ def parse_ignore_files(dir):
         ignorers.extend(parse_ignore_file(os.path.join(dir, filename)))
     return ignorers
 
+def get_initial_ignorers():
+    if '.ffignore' in options.ignore_files:
+        home = os.environ.get('HOME')
+        if home:
+            return parse_ignore_file(os.path.join(home, '.ffignore'))
+        else:
+            return []
+    else:
+        return []
 
 # Searching! ------------------------------------------------------------------
 def get_type(path):
@@ -224,8 +233,10 @@ def match(query, path, basename):
     result = _match()
     return not result if options.invert else result
 
-def search(query, dir='.', depth=0, ignorers=[]):
+
+def _search(query, dir, depth, ignorers):
     ignorers = ignorers + parse_ignore_files(dir)
+
     contents = os.listdir(dir)
     next = []
 
@@ -243,7 +254,10 @@ def search(query, dir='.', depth=0, ignorers=[]):
 
     if depth < options.depth:
         for d in next:
-            search(query, d, depth + 1, ignorers)
+            _search(query, d, depth + 1, ignorers)
+
+def search(query, dir='.', depth=0, ignorers=None):
+    _search(query, '.', 0, get_initial_ignorers())
 
 
 # Option Parsing and Main -----------------------------------------------------
