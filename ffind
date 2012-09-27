@@ -164,7 +164,7 @@ def compile_git(line):
     # 0. Patterns ending in a slash will only match directories, and then you
     #    can ignore that slash for the rest of these rules.
     # 1. Patterns are shell globs, except * doesn't match / and there's no **.
-    # 2. Patterns without a slash search the basename of the page, for example:
+    # 2. Patterns without a slash search the basename of the path, for example:
     #    the 'file.txt' in '/foo/bar/file.txt'.
     # 3. Patterns with a slash search against the entire path.
     # 4. All matching must match the entire string it's searching.  For example:
