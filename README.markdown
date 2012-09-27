@@ -19,6 +19,12 @@ opinionated software.
 
 [ack]: http://betterthangrep.com/
 
+* Mercurial: http://bitbucket.org/sjl/friendly-find/
+* Git: http://github.com/sjl/friendly-find/
+* Documentation: http://github.com/sjl/friendly-find/#usage
+* Issues: http://github.com/sjl/friendly-find/issues/
+* License: GPLv3 (see [notes](http://github.com/sjl/friendly-find/#license))
+
 Installation
 ------------
 
