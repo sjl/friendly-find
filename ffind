@@ -69,6 +69,7 @@ IGNORE_MODE_ALL = 4
 
 # Regexes ---------------------------------------------------------------------
 SIZE_RE = re.compile(r'^(\d+(?:\.\d+)?)([bkmgtp])?[a-z]*$', re.IGNORECASE)
+
 AGO_RE = re.compile(r'''
                     (\d+(?:\.\d+)?)           # The number (float/int)
                     \s*                       # Optional whitespace
@@ -82,10 +83,15 @@ AGO_RE = re.compile(r'''
                       | s(?:ecs?(?:onds?)?)?  # s/sec/secs/second/seconds
                     )
                     ''', re.VERBOSE | re.IGNORECASE)
+
 IGNORE_SYNTAX_RE = re.compile(r'^\s*syntax:\s*(glob|regexp|regex|re|literal)\s*$',
                               re.IGNORECASE)
 IGNORE_COMMENT_RE = re.compile(r'^\s*#')
 IGNORE_BLANK_RE = re.compile(r'^\s*$')
+
+GITIGNORE_COMMENT_RE = re.compile(r'^\s*#')
+GITIGNORE_BLANK_RE = re.compile(r'^\s*$')
+GITIGNORE_NEGATE_RE = re.compile(r'^\s*!')
 
 
 # Global Options --------------------------------------------------------------
@@ -125,7 +131,90 @@ def compile_literal(line):
     l = line
     return lambda s: l in s
 
-def parse_ignore_file(path):
+def compile_git(line):
+    pat = ''
+
+    # The following comments are (mostly) from gitignore(5).
+
+    # If the pattern ends with a slash, it is removed for the purpose of the
+    # following description, but it would only find a match with a directory. In
+    # other words, foo/ will match a directory foo and paths underneath it, but
+    # will not match a regular file or a symbolic link foo (this is consistent
+    # with the way how pathspec works in general in git).
+    # directories_only = line.endswith('/')
+
+    # A leading slash matches the beginning of the pathname. For example, "/*.c"
+    # matches "cat-file.c" but not "mozilla-sha1/sha1.c".
+    if line.startswith('/'):
+        pat += '^./'
+        line = line[1:]
+
+    def _eat_glob(chs):
+        pat = ''
+        while chs:
+            ch = chs.pop(0)
+            if ch == '?':
+                pat += '.'
+            elif ch == '*':
+                pat += '[^/]*'
+            elif ch == '[':
+                pat += '['
+                ch = chs.pop(0)
+                while chs and ch != ']':
+                    pat += ch
+                    ch = chs.pop(0)
+                pat += ']'
+            else:
+                pat += re.escape(ch)
+        return pat
+
+    chs = list(line)
+    # I can't tell what the difference is between these two cases because git's
+    # documentation is fucking inscrutable.
+    if '/' not in line:
+        # If the pattern does not contain a slash /, git treats it as a shell
+        # glob pattern and checks for a match against the pathname relative to
+        # the location of the .gitignore file (relative to the toplevel of the
+        # work tree if not from a .gitignore file).
+        pat += _eat_glob(chs)
+    else:
+        # Otherwise, git treats the pattern as a shell glob suitable for
+        # consumption by fnmatch(3) with the FNM_PATHNAME flag: wildcards in the
+        # pattern will not match a / in the pathname. For example,
+        # "Documentation/*.html" matches "Documentation/git.html" but not
+        # "Documentation/ppc/ppc.html" or "tools/perf/Documentation/perf.html".
+        pat += _eat_glob(chs)
+
+    try:
+        regex = re.compile(pat)
+        return lambda s: regex.search(s)
+    except:
+        warn("could not parse gitignore pattern '%s'" % line)
+        return lambda s: True
+
+
+def parse_gitignore_file(path):
+    if not os.path.isfile(path):
+        return []
+
+    ignorers = []
+    with open(path) as f:
+        for line in f.readlines():
+            line = line.rstrip('\n')
+            if GITIGNORE_BLANK_RE.match(line):
+                continue
+            elif GITIGNORE_COMMENT_RE.match(line):
+                continue
+            elif GITIGNORE_NEGATE_RE.match(line):
+                # TODO: This bullshit feature.
+                continue
+            else:
+                # This line is a gitignore pattern.
+                ignorers.append(compile_git(line))
+
+    return ignorers
+
+def parse_ffignore_file(path):
     if not os.path.isfile(path):
         return []
 
@@ -160,18 +249,24 @@ def parse_ignore_file(path):
 def parse_ignore_files(dir):
     ignorers = []
     for filename in options.ignore_files:
-        ignorers.extend(parse_ignore_file(os.path.join(dir, filename)))
+        target = os.path.join(dir, filename)
+        if filename == '.ffignore':
+            ignorers.extend(parse_ffignore_file(target))
+        elif filename == '.gitignore':
+            ignorers.extend(parse_gitignore_file(target))
     return ignorers
+
 
 def get_initial_ignorers():
     if '.ffignore' in options.ignore_files:
         home = os.environ.get('HOME')
         if home:
-            return parse_ignore_file(os.path.join(home, '.ffignore'))
+            return parse_ffignore_file(os.path.join(home, '.ffignore'))
         else:
             return []
     else:
         return []
+
 
 # Searching! ------------------------------------------------------------------
 def get_type(path):
@@ -572,7 +667,7 @@ def main():
 
     # Ignore files
     if options.ignore_mode == IGNORE_MODE_RESTRICTED:
-        options.ignore_files = ['.ffignore']
+        options.ignore_files = ['.ffignore', '.gitignore']
         options.ignore_vcs_dirs = True
     elif options.ignore_mode == IGNORE_MODE_SEMI:
         options.ignore_files = ['.ffignore']
