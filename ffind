@@ -93,6 +93,11 @@ GITIGNORE_COMMENT_RE = re.compile(r'^\s*#')
 GITIGNORE_BLANK_RE = re.compile(r'^\s*$')
 GITIGNORE_NEGATE_RE = re.compile(r'^\s*!')
 
+HGIGNORE_SYNTAX_RE = re.compile(r'^\s*syntax:\s*(glob|regexp|re)\s*$',
+                                re.IGNORECASE)
+HGIGNORE_COMMENT_RE = re.compile(r'^\s*#')
+HGIGNORE_BLANK_RE = re.compile(r'^\s*$')
+
 
 # Global Options --------------------------------------------------------------
 # (it's a prototype, shut up)
@@ -123,9 +128,33 @@ def compile_re(line):
         warn('could not compile regular expression "%s"' % line)
         return lambda s: False
 
-def compile_glob(line):
-    # TODO
-    die('glob ignore patterns are not supported yet, sorry!')
+def glob_to_re(glob):
+    pat = ''
+
+    chs = list(glob)
+    while chs:
+        ch = chs.pop(0)
+        if ch == '\\':
+            pat += re.escape(chs.pop(0))
+        elif ch == '?':
+            pat += '.'
+        elif ch == '*':
+            if chs and chs[0] == '*':
+                chs.pop(0)
+                pat += '.*'
+            else:
+                pat += '[^/]*'
+        elif ch == '[':
+            pat += '['
+            ch = chs.pop(0)
+            while chs and ch != ']':
+                pat += ch
+                ch = chs.pop(0)
+            pat += ']'
+        else:
+            pat += re.escape(ch)
+
+    return pat
 
 def compile_literal(line):
     l = line
@@ -227,10 +256,35 @@ def compile_git(line):
     pat += '$'
 
     try:
-        regex = re.compile(pat)
-        return lambda s: regex.search(s)
+        return compile_re(pat)
     except:
         warn("could not parse gitignore pattern '%s'" % original_line)
+        return lambda s: True
+
+def compile_hg_glob(line):
+    pat = glob_to_re(line)
+
+    # Mercurial ignore globs are quasi-rooted at directory boundaries or the
+    # beginning of the pattern.
+    pat = '(^|/)' + pat
+
+    # Mercurial globs also have to match to the end of the pattern.
+    pat = pat + '$'
+
+    try:
+        regex = re.compile(pat)
+        return lambda s: regex.search(s[2:] if s.startswith('./') else s)
+    except:
+        warn("could not parse hgignore pattern '%s'" % line)
+        return lambda s: True
+
+def compile_ff_glob(line):
+    pat = glob_to_re(line)
+
+    try:
+        return compile_re(pat)
+    except:
+        warn("could not parse ffignore pattern '%s'" % line)
         return lambda s: True
 
 
@@ -252,6 +306,34 @@ def parse_gitignore_file(path):
             else:
                 # This line is a gitignore pattern.
                 ignorers.append(compile_git(line))
+
+    return ignorers
+
+def parse_hgignore_file(path):
+    if not os.path.isfile(path):
+        return []
+
+    syntax = IGNORE_SYNTAX_REGEX
+    ignorers = []
+    with open(path) as f:
+        for line in f.readlines():
+            line = line.rstrip('\n')
+            if HGIGNORE_BLANK_RE.match(line):
+                continue
+            elif HGIGNORE_COMMENT_RE.match(line):
+                continue
+            elif HGIGNORE_SYNTAX_RE.match(line):
+                s = HGIGNORE_SYNTAX_RE.match(line).groups()[0].lower()
+                if s == 'glob':
+                    syntax = IGNORE_SYNTAX_GLOB
+                elif s in ['re', 'regexp']:
+                    syntax = IGNORE_SYNTAX_REGEX
+            else:
+                # This line is a pattern.
+                if syntax == IGNORE_SYNTAX_REGEX:
+                    ignorers.append(compile_re(line))
+                elif syntax == IGNORE_SYNTAX_GLOB:
+                    ignorers.append(compile_hg_glob(line))
 
     return ignorers
 
@@ -283,7 +365,7 @@ def parse_ffignore_file(path):
                 elif syntax == IGNORE_SYNTAX_REGEX:
                     ignorers.append(compile_re(line))
                 elif syntax == IGNORE_SYNTAX_GLOB:
-                    ignorers.append(compile_glob(line))
+                    ignorers.append(compile_ff_glob(line))
 
     return ignorers
 
@@ -295,6 +377,8 @@ def parse_ignore_files(dir):
             ignorers.extend(parse_ffignore_file(target))
         elif filename == '.gitignore':
             ignorers.extend(parse_gitignore_file(target))
+        elif filename == '.hgignore':
+            ignorers.extend(parse_hgignore_file(target))
     return ignorers
 
 
@@ -709,7 +793,7 @@ def main():
 
     # Ignore files
     if options.ignore_mode == IGNORE_MODE_RESTRICTED:
-        options.ignore_files = ['.ffignore', '.gitignore']
+        options.ignore_files = ['.ffignore', '.gitignore', '.hgignore']
         options.ignore_vcs_dirs = True
     elif options.ignore_mode == IGNORE_MODE_SEMI:
         options.ignore_files = ['.ffignore']

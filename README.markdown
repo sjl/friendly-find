@@ -10,8 +10,7 @@ Currently it's still in a prototype stage.  Most things work, with the following
 notable exceptions:
 
 * Time filtering is unimplemented.
-* VCS ignore files aren't parsed (however: VCS data directories *are* skipped,
-  and the `.ffignore` file *is* parsed).
+* SVN ignores aren't parsed.
 * It's pretty slow (though pruning VCS data directories saves lots of time).
 
 Feedback is welcome, though remember that it's still a prototype, and is
