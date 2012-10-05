@@ -1,0 +1,8 @@
+.DS_Store
+*.pyc
+*.swp
+*.swo
+*.un~
+.ropeproject
+tags
+*.t.err
