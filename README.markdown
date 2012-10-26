@@ -27,13 +27,15 @@ opinionated software.
 Installation
 ------------
 
-While `ffind` is in this prototype stage installation is manual.
+If you're on OS X you can use Homebrew:
+
+    brew install ffind
+
+Or you can install manually:
 
 1. Copy the `ffind` to your computer somehow.
 2. Make it executable.
 3. Get it into your path somehow.
-
-That's it.
 
 Usage
 -----
