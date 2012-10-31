@@ -444,7 +444,11 @@ def match(query, path, basename):
                 return False
 
         if not options.binary:
-            with open(path) as f:
+            # We open in non-blocking mode so things like file-based sockets
+            # don't hang while waiting for their full kb.
+            # TODO: Ignore those altogether for the binary check?
+            fd = os.open(path, os.O_NONBLOCK)
+            with os.fdopen(fd) as f:
                 if '\0' in f.read(1024):
                     return False
 
