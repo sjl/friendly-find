@@ -423,7 +423,7 @@ def match(query, path, basename):
             if get_type(path) not in options.type:
                 return False
 
-        if not query(basename):
+        if not query(path if options.entire else basename):
             return False
 
         stat = os.lstat(path)
@@ -511,6 +511,12 @@ def build_option_parser():
     p.add_option('-v', '--invert',
                  action='store_true', default=False,
                  help='invert match')
+    p.add_option('-e', '--entire',
+                 action='store_true', default=False,
+                 help='match PATTERN against the entire path string')
+    p.add_option('-E', '--non-entire', dest='entire',
+                 action='store_false',
+                 help='match PATTERN against only the filenames (default)')
 
     # Case sensitivity
     g = OptionGroup(p, "Configuring Case Sensitivity")
