@@ -646,6 +646,19 @@ def build_type_set(types):
 
     result = set()
     for c in types:
+        if c not in 'aexcyfdrs':
+            die("invalid type specification\n\n"
+                "valid types:\n\n"
+                "  a (all)\n"
+                "  f (files)\n"
+                "  d (dirs)\n"
+                "  r (real)\n"
+                "  s (symlinked)\n"
+                "  e (real files)\n"
+                "  c (real dirs)\n"
+                "  x (symlinked files)\n"
+                "  y (symlinked dirs)")
+
         result = result | {
             'a': TYPES_ALL,
 
