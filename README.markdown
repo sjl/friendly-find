@@ -40,7 +40,7 @@ Or you can install manually:
 Usage
 -----
 
-Eventuall I'll make a man page, but for now:
+Eventually I'll make a man page, but for now:
 
 ### Command Line Program
 
