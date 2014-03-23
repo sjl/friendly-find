@@ -381,7 +381,6 @@ def parse_ignore_files(dir):
             ignorers.extend(parse_hgignore_file(target))
     return ignorers
 
-
 def parse_ignore_args():
     return [compile_ff_glob(pattern) for pattern in options.ignore]
 
@@ -569,7 +568,7 @@ def build_option_parser():
                  help="don't ignore anything (ALL files can match)")
 
     g.add_option('-I', '--ignore', metavar='PATTERN',
-                 action='append',
+                 action='append', default=[],
                  help="add a pattern to be ignored (can be given multiple times)")
 
     p.add_option_group(g)
