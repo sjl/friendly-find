@@ -382,6 +382,10 @@ def parse_ignore_files(dir):
     return ignorers
 
 
+def parse_ignore_args():
+    return [compile_ff_glob(pattern) for pattern in options.ignore]
+
+
 def get_initial_ignorers():
     if '.ffignore' in options.ignore_files:
         home = os.environ.get('HOME')
@@ -460,7 +464,7 @@ def match(query, path, basename):
 
 
 def _search(query, dir, depth, ignorers):
-    ignorers = ignorers + parse_ignore_files(dir)
+    ignorers = ignorers + parse_ignore_files(dir) + parse_ignore_args()
 
     contents = os.listdir(dir)
     next = []
