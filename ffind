@@ -189,7 +189,7 @@ def compile_git(line):
     # If you can't tell what the hell this means you're not alone, because git's
     # documentation is fucking inscrutable.  Here's what I've come up with from
     # trial and error:
-    # 
+    #
     # 0. Patterns ending in a slash will only match directories, and then you
     #    can ignore that slash for the rest of these rules.
     # 1. Patterns are shell globs, except * doesn't match / and there's no **.
@@ -465,7 +465,11 @@ def match(query, path, basename):
 def _search(query, dir, depth, ignorers):
     ignorers = ignorers + parse_ignore_files(dir) + parse_ignore_args()
 
-    contents = os.listdir(dir)
+    try:
+        contents = os.listdir(dir)
+    except OSError:
+        err('Error: `' + dir + '`: Permission denied')
+        return
     next = []
 
     for item in contents:
