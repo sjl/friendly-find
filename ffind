@@ -18,6 +18,7 @@ from optparse import OptionParser, OptionGroup
 
 
 # Constants -------------------------------------------------------------------
+VERSION = ('1', '0', '0')
 CASE_SENSITIVE = 1
 CASE_INSENSITIVE = 2
 CASE_SMART = 3
@@ -500,6 +501,9 @@ def build_option_parser():
     p = OptionParser("usage: %prog [options] PATTERN")
 
     # Main options
+    p.add_option('--version',
+                 action='store_true', default=False,
+                 help='print the version and exit')
     p.add_option('-d', '--dir', default='.',
                  help='root the search in DIR (default .)',
                  metavar='DIR')
@@ -784,6 +788,10 @@ def main():
     global options
 
     (options, args) = build_option_parser().parse_args()
+
+    if options.version:
+        print('friendly-find version %s' % '.'.join(VERSION))
+        sys.exit(0)
 
     # PATTERN
     if len(args) > 1:
