@@ -40,7 +40,8 @@ Or you can install manually:
 Usage
 -----
 
-Eventually I'll make a man page, but for now:
+There's a half-assed man page generated from `help2man`, but `ffind --help` is
+probably easier to read.
 
 ### Command Line Program
 
@@ -48,6 +49,7 @@ Eventually I'll make a man page, but for now:
 
     Options:
       -h, --help            show this help message and exit
+      --version             print the version and exit
       -d DIR, --dir=DIR     root the search in DIR (default .)
       -D N, --depth=N       search at most N directories deep (default 25)
       -f, --follow          follow symlinked directories and search their contents
@@ -55,6 +57,10 @@ Eventually I'll make a man page, but for now:
       -0, --print0          separate matches with a null byte in output
       -l, --literal         force literal search, even if it looks like a regex
       -v, --invert          invert match
+      -e, --entire          match PATTERN against the entire path string
+      -E, --non-entire      match PATTERN against only the filenames (default)
+      -p, --full-path       print the file's full path
+      -P, --relative-path   print the file's relative path (default)
 
       Configuring Case Sensitivity:
         -s, --case-sensitive
@@ -127,7 +133,7 @@ Will ignore:
 License
 -------
 
-Copyright 2012 Steve Losh and contributors.
+Copyright 2015 Steve Losh and contributors.
 
 Licensed under [version 3 of the GPL][gpl].
 
