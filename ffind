@@ -474,7 +474,7 @@ def _search(query, dir, depth, ignorers):
 
     for item in contents:
         path = os.path.join(dir, item)
-        if options.print_fullname:
+        if options.full_path:
             path = os.path.abspath(path)
 
         if not should_ignore(item, path, ignorers):
@@ -527,9 +527,12 @@ def build_option_parser():
     p.add_option('-E', '--non-entire', dest='entire',
                  action='store_false',
                  help='match PATTERN against only the filenames (default)')
-    p.add_option('-p', '--fullname', dest='print_fullname',
+    p.add_option('-p', '--full-path', dest='full_path',
                   action='store_true', default=False,
-                  help="print the file's full name")
+                  help="print the file's full path")
+    p.add_option('-P', '--relative-path', dest='full_path',
+                  action='store_false',
+                  help="print the file's relative path (default)")
 
     # Case sensitivity
     g = OptionGroup(p, "Configuring Case Sensitivity")
