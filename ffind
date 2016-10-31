@@ -101,7 +101,6 @@ HGIGNORE_BLANK_RE = re.compile(r'^\s*$')
 
 
 # Global Options --------------------------------------------------------------
-# (it's a prototype, shut up)
 options = None
 
 
@@ -120,7 +119,7 @@ def warn(s):
     sys.stderr.write('warning: ' + s + '\n')
 
 
-# Ingore Files ----------------------------------------------------------------
+# Ignore Files ----------------------------------------------------------------
 def compile_re(line):
     try:
         r = re.compile(line)
@@ -423,9 +422,10 @@ def should_ignore(basename, path, ignorers):
 
 def match(query, path, basename):
     def _match():
-        if options.type != TYPES_ALL:
-            if get_type(path) not in options.type:
-                return False
+        type = get_type(path)
+
+        if type not in options.type:
+            return False
 
         if not query(path if options.entire else basename):
             return False
@@ -447,14 +447,19 @@ def match(query, path, basename):
             if stat.st_mtime < options.after:
                 return False
 
-        if not options.binary:
-            # We open in non-blocking mode so things like file-based sockets
-            # don't hang while waiting for their full kb.
-            # TODO: Ignore those altogether for the binary check?
-            fd = os.open(path, os.O_NONBLOCK)
-            with os.fdopen(fd) as f:
-                if '\0' in f.read(1024):
-                    return False
+        if (not options.binary) and (type in TYPES_FILE):
+            # Resolve symlinks
+            target = os.path.realpath(path) if type in TYPES_SYMLINK else path
+
+            # Ignore broken symlinks (treating them as non-binary)
+            if os.path.exists(target):
+                # We open in non-blocking mode so things like file-based sockets
+                # don't hang while waiting for their full kb.
+                # TODO: Ignore those altogether for the binary check?
+                fd = os.open(target, os.O_NONBLOCK)
+                with os.fdopen(fd) as f:
+                    if '\0' in f.read(1024):
+                        return False
 
         return True
 

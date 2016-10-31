@@ -133,7 +133,7 @@ Will ignore:
 License
 -------
 
-Copyright 2015 Steve Losh and contributors.
+Copyright 2016 Steve Losh and contributors.
 
 Licensed under [version 3 of the GPL][gpl].
 
