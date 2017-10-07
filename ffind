@@ -8,12 +8,13 @@
 #
 #                         The friendlier file finder.
 
-import time
-import os
+import errno
 import optparse
+import os
+import re
 import string
 import sys
-import re
+import time
 from optparse import OptionParser, OptionGroup
 
 
@@ -882,4 +883,11 @@ if __name__ == '__main__':
         sys.stdout.write('\n')
         sys.exit(130)
     signal.signal(signal.SIGINT, sigint_handler)
-    main()
+
+    try:
+        main()
+    except IOError as e:
+        if e.errno != errno.EPIPE:
+            raise
+        else:
+            pass
