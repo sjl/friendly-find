@@ -18,7 +18,7 @@ opinionated software.
 
 [ack]: http://betterthangrep.com/
 
-* Mercurial: <http://hg.sr.ht/~sjl/friendly-find/>
+* Mercurial: <http://hg.stevelosh.com/friendly-find/>
 * Git: <http://github.com/sjl/friendly-find/>
 * Documentation: <http://github.com/sjl/friendly-find/#usage>
 * Issues: <http://github.com/sjl/friendly-find/issues/>
