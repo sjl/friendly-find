@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf8 -*-
 
 #    ____  ____  __  ____  __ _  ____  __    _  _     ____  __  __ _  ____
@@ -458,8 +458,8 @@ def match(query, path, basename):
                 # don't hang while waiting for their full kb.
                 # TODO: Ignore those altogether for the binary check?
                 fd = os.open(target, os.O_NONBLOCK)
-                with os.fdopen(fd) as f:
-                    if '\0' in f.read(1024):
+                with os.fdopen(fd, 'rb') as f:
+                    if 0 in f.read(1024):
                         return False
 
         return True
